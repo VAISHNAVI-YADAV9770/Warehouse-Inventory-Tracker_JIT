@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Warehouse Inventory Tracker</title>
+</head>
+<body>
+<script>
+
+class Product {
+  constructor(id, name, quantity = 0, reorderThreshold = 0) {
+    this.id = id;
+    this.name = name;
+    this.quantity = Number(quantity);
+    this.reorderThreshold = Number(reorderThreshold);
+  }
+
+  addStock(amount) {
+    amount = Number(amount);
+    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, msg: "Invalid amount" };
+    this.quantity += amount;
+    return { ok: true, quantity: this.quantity };
+  }
+
+  removeStock(amount) {
+    amount = Number(amount);
+    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, msg: "Invalid amount" };
+    if (amount > this.quantity) return { ok: false, msg: "Insufficient stock", available: this.quantity };
+    this.quantity -= amount;
+    return { ok: true, quantity: this.quantity };
+  }
+}
+
+
+class AlertService {
+  constructor(name = "DefaultAlert") {
+    this.name = name;
+  }
+  notify(product) {
+    console.log(`⚠️ [${this.name}] Restock Alert: Low stock for ${product.name} – only ${product.quantity} left!`);
+  }
+}
+
+
+class Warehouse {
+  constructor() {
+    this.products = new Map();
+    this.observers = []; 
+  }
+
+  addObserver(obs) {
+    if (obs && typeof obs.notify === "function") {
+      this.observers.push(obs);
+      return true;
+    }
+    return false;
+  }
+
+  removeObserver(obs) {
+    const idx = this.observers.indexOf(obs);
+    if (idx >= 0) {
+      this.observers.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
+  _notifyObservers(product) {
+    this.observers.forEach(o => {
+      try { o.notify(product); } catch (e) { console.error("Observer error:", e); }
+    });
+  }
+
+  addProduct(id, name, quantity = 0, threshold = 0) {
+    if (!id || !name) return { ok: false, msg: "Invalid id or name" };
+    if (this.products.has(id)) return { ok: false, msg: "Product already exists" };
+    const p = new Item(id, name, quantity, threshold);
+    this.products.set(id, p);
+    console.log(`✅ Product added: ${name} (ID: ${id})`);
+    return { ok: true, product: p };
+  }
+
+  receiveShipment(id, amount) {
+    const product = this.products.get(id);
+    if (!product) return { ok: false, msg: "Product ID not found" };
+    const res = product.addStock(amount);
+    if (res.ok) {
+      console.log(`📦 Shipment received: ${amount} units of ${product.name}. New qty: ${product.quantity}`);
+      return { ok: true, product };
+    } else {
+      console.log(`❌ Shipment error for ${id}: ${res.msg}`);
+      return res;
+    }
+  }
+
+  fulfillOrder(id, amount) {
+    const product = this.products.get(id);
+    if (!product) return { ok: false, msg: "Product ID not found" };
+    const res = product.removeStock(amount);
+    if (!res.ok) {
+      console.log(`❌ Order error: ${res.msg} (Product: ${product.name})`);
+      return res;
+    }
+    console.log(`📤 Order fulfilled: ${amount} units of ${product.name}. Remaining: ${product.quantity}`);
+    if (product.quantity < product.reorderThreshold) {
+      this._notifyObservers(product);
+    }
+    return { ok: true, product };
+  }
+
+  showInventory() {
+    console.log("\n📋 Current Inventory:");
+    if (this.products.size === 0) {
+      console.log(" (empty)");
+      return;
+    }
+    this.products.forEach(p => {
+      console.log(`${p.name} (ID: ${p.id}) – Quantity: ${p.quantity} – ReorderThreshold: ${p.reorderThreshold}`);
+    });
+  }
+}
+
+
+const warehouse = new Warehouse();
+const Alert = new AlertService("Alert");
+
+
+
+warehouse.addObserver(Alert);
+
+
+warehouse.addProduct("I001", "Tablet", 0, 5);
+warehouse.receiveShipment("I001", 10);   
+warehouse.fulfillOrder("I001", 6);       
+warehouse.showInventory();
+
+warehouse.fulfillOrder("I001", 5);      
+warehouse.receiveShipment("INVALID_ID", 5); 
+</script>
+</body>
+</html>
